@@ -1,0 +1,7 @@
+[package]
+name = "gzip-header"
+version = "0.1.0"
+authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
+
+[dependencies]
+crc = "1.4.0"
