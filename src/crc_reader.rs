@@ -21,7 +21,10 @@ pub struct CrcReader<R> {
 impl Crc {
     /// Create a new empty CRC struct.
     pub fn new() -> Crc {
-        Crc { crc: crc32::Digest::new(crc32::IEEE), amt: 0 }
+        Crc {
+            crc: crc32::Digest::new(crc32::IEEE),
+            amt: 0,
+        }
     }
 
     /// Return the current checksum value.
