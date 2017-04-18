@@ -31,7 +31,7 @@ static FCOMMENT: u8 = 1 << 4;
 
 /// An enum describing the different OS types described in the gzip format.
 /// See http://www.gzip.org/format.txt
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FileSystemType {
     Fat = 0,
@@ -75,7 +75,7 @@ impl FileSystemType {
 /// This is a field to be used by the compression methods. For deflate, which is the only
 /// specified compression method, this is a value indicating the level of compression of the
 /// contained compressed data.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ExtraFlags {
     Default = 0,
@@ -93,6 +93,7 @@ impl ExtraFlags {
 /// A builder structure to create a new gzip header.
 ///
 /// This structure controls header configuration options such as the filename.
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct GzBuilder {
     extra: Option<Vec<u8>>,
     filename: Option<CString>,
@@ -122,23 +123,28 @@ impl GzBuilder {
     }
 
     /// Configure the `extra` field in the gzip header.
-    pub fn extra(mut self, extra: Vec<u8>) -> GzBuilder {
-        self.extra = Some(extra);
+    ///
+    /// # Panics
+    /// Panics if the extra argument contains a `\0` byte.
+    pub fn extra<T: Into<Vec<u8>>>(mut self, extra: T) -> GzBuilder {
+        self.extra = Some(extra.into());
         self
     }
 
     /// Configure the `filename` field in the gzip header.
     ///
-    /// A trailing `\0` is added if needed.
-    pub fn filename(mut self, filename: &[u8]) -> GzBuilder {
+    /// # Panics
+    /// Panics if the filename argument contains a `\0` byte.
+    pub fn filename<T: Into<Vec<u8>>>(mut self, filename: T) -> GzBuilder {
         self.filename = Some(CString::new(filename).unwrap());
         self
     }
 
     /// Configure the `comment` field in the gzip header.
     ///
-    /// A trailing `\0` is added if needed.
-    pub fn comment(mut self, comment: &[u8]) -> GzBuilder {
+    /// # Panics
+    /// Panics if the comment argument contains a `\0` byte.
+    pub fn comment<T: Into<Vec<u8>>>(mut self, comment: T) -> GzBuilder {
         self.comment = Some(CString::new(comment).unwrap());
         self
     }
@@ -257,6 +263,7 @@ impl GzBuilder {
 ///
 /// The header can contain metadata about the file that was compressed, if
 /// present.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GzHeader {
     extra: Option<Vec<u8>>,
     filename: Option<Vec<u8>>,

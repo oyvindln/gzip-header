@@ -3,11 +3,15 @@
 use std::io::{Read, BufRead};
 use std::io;
 
-use crc::{crc32, Hasher32};
+use crc::crc32;
 
-/// A struct containing a CRC checksum and the amount of bytes input to it.
+/// A wrapper struct containing a CRC checksum in the format used by gzip and the amount of bytes
+/// input to it mod 2^32.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Crc {
-    crc: crc32::Digest,
+    // We don't use the Digest struct from the Crc crate for now as it doesn't implement `Display`
+    // and other common traits.
+    checksum: u32,
     amt: u32,
 }
 
@@ -22,14 +26,21 @@ impl Crc {
     /// Create a new empty CRC struct.
     pub fn new() -> Crc {
         Crc {
-            crc: crc32::Digest::new(crc32::IEEE),
+            checksum: 0,
             amt: 0,
+        }
+    }
+
+    pub fn with_initial(checksum: u32, amount: u32) -> Crc {
+        Crc {
+            checksum: checksum,
+            amt: amount,
         }
     }
 
     /// Return the current checksum value.
     pub fn sum(&self) -> u32 {
-        self.crc.sum32()
+        self.checksum
     }
 
     /// Return the number of bytes input.
@@ -40,12 +51,12 @@ impl Crc {
     /// Update the checksum and byte counter with the provided data.
     pub fn update(&mut self, data: &[u8]) {
         self.amt = self.amt.wrapping_add(data.len() as u32);
-        self.crc.write(data);
+        self.checksum = crc32::update(self.checksum, &crc32::IEEE_TABLE, data);
     }
 
     /// Reset the checksum and byte counter.
     pub fn reset(&mut self) {
-        self.crc.reset();
+        self.checksum = 0;
         self.amt = 0;
     }
 }
@@ -97,5 +108,17 @@ impl<R: BufRead> BufRead for CrcReader<R> {
             self.crc.update(&data[..amt]);
         }
         self.inner.consume(amt);
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::Crc;
+    #[test]
+    fn checksum_correct() {
+        let mut c = Crc::new();
+        c.update(b"abcdefg12345689\n");
+        assert_eq!(c.sum(), 0x141ddb83);
+        assert_eq!(c.amt_as_u32(), 16);
     }
 }
