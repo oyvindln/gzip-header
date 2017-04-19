@@ -18,8 +18,7 @@ extern crate crc;
 mod crc_reader;
 
 use std::ffi::CString;
-use std::env;
-use std::io;
+use std::{env, io, time};
 use std::io::Read;
 
 pub use crc_reader::{CrcReader, Crc};
@@ -98,6 +97,9 @@ pub struct GzBuilder {
     extra: Option<Vec<u8>>,
     filename: Option<CString>,
     comment: Option<CString>,
+    // Whether this should be signed is a bit unclear, the gzip spec says mtime is in the unix
+    // time format, which is normally signed, however zlib seems to use an unsigned long for this
+    // field.
     mtime: u32,
     os: Option<FileSystemType>,
     xfl: ExtraFlags,
@@ -274,24 +276,51 @@ pub struct GzHeader {
 }
 
 impl GzHeader {
-    /// Returns the `filename` field of this gzip stream's header, if present.
+    /// Returns the `filename` field of this gzip header, if present.
+    ///
+    /// The `filename` field the gzip header is supposed to be stored using ISO 8859-1 (LATIN-1)
+    /// encoding and be zero-terminated if following the specification.
     pub fn filename(&self) -> Option<&[u8]> {
         self.filename.as_ref().map(|s| &s[..])
     }
 
-    /// Returns the `extra` field of this gzip stream's header, if present.
+    /// Returns the `extra` field of this gzip header, if present.
     pub fn extra(&self) -> Option<&[u8]> {
         self.extra.as_ref().map(|s| &s[..])
     }
 
     /// Returns the `comment` field of this gzip stream's header, if present.
+    ///
+    /// The `comment` field in the gzip header is supposed to be stored using ISO 8859-1 (LATIN-1)
+    /// encoding and be zero-terminated if following the specification.
     pub fn comment(&self) -> Option<&[u8]> {
         self.comment.as_ref().map(|s| &s[..])
     }
 
-    /// Returns the `mtime` field of this gzip stream's header.
+    /// Returns the `mtime` field of this gzip header.
+    ///
+    /// This gives the most recent modification time of the contained file, or alternatively
+    /// the timestamp of when the file was compressed if the data did not come from a file, or
+    /// a timestamp was not available when compressing. The time is specified the Unix format,
+    /// that is: seconds since 00:00:00 GMT, Jan. 1, 1970. (Not that this may cause problems for
+    /// MS-DOS and other systems that use local rather than Universal time.)
+    /// An `mtime` value of 0 means that the timestamp is not set.
     pub fn mtime(&self) -> u32 {
         self.mtime
+    }
+
+    /// Returns the `mtime` field of this gzip header as a `SystemTime` if present.
+    ///
+    /// Returns `None` if the `mtime` is not set, i.e 0.
+    /// See [`mtime`](#method.mtime) for more detail.
+    pub fn mtime_as_datetime(&self) -> Option<time::SystemTime> {
+        if self.mtime == 0 {
+            None
+        } else {
+            let duration = time::Duration::new(u64::from(self.mtime), 0);
+            let datetime = time::UNIX_EPOCH + duration;
+            Some(datetime)
+        }
     }
 
     /// Returns the `os` field of this gzip stream's header.
@@ -321,6 +350,14 @@ fn read_le_u16<R: Read>(r: &mut R) -> io::Result<u16> {
     Ok((b[0] as u16) | ((b[1] as u16) << 8))
 }
 
+/// Try to read a gzip header from the provided reader.
+///
+/// Returns a `GzHeader` with the fields filled out if sucessful, or an `io::Error` with
+/// `ErrorKind::InvalidInput` if decoding of the header.
+///
+/// Note that a gzip steam can contain multiple "members". Each member contains a header,
+/// followed by compressed data and finally a checksum and byte count.
+/// This method will only read the header for the "member" at the start of the stream.
 pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     let mut crc_reader = CrcReader::new(r);
     let mut header = [0; 10];
