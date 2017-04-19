@@ -125,9 +125,6 @@ impl GzBuilder {
     }
 
     /// Configure the `extra` field in the gzip header.
-    ///
-    /// # Panics
-    /// Panics if the extra argument contains a `\0` byte.
     pub fn extra<T: Into<Vec<u8>>>(mut self, extra: T) -> GzBuilder {
         self.extra = Some(extra.into());
         self
