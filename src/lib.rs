@@ -14,12 +14,15 @@
 //! [flate2](https://crates.io/crates/flate2) crate.
 
 extern crate crc;
+#[macro_use]
+extern crate enum_primitive;
 
 mod crc_reader;
 
 use std::ffi::CString;
 use std::{env, io, time};
 use std::io::Read;
+use std::fmt;
 
 pub use crc_reader::{CrcReader, Crc};
 
@@ -30,7 +33,8 @@ static FCOMMENT: u8 = 1 << 4;
 
 /// An enum describing the different OS types described in the gzip format.
 /// See http://www.gzip.org/format.txt
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum_from_primitive!{
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum FileSystemType {
     Fat = 0,
@@ -61,6 +65,7 @@ pub enum FileSystemType {
     Apple = 19,
     Unknown = 255,
 }
+}
 
 impl FileSystemType {
     /// Get the raw byte value of this `FileSystemType` variant.
@@ -69,11 +74,42 @@ impl FileSystemType {
     }
 }
 
+impl fmt::Display for FileSystemType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use FileSystemType::*;
+        match *self {
+                Fat => "FAT filesystem (MS-DOS, OS/2, NT/Win32)",
+                Amiga => "Amiga",
+                Vms => "VMS or OpenVMS",
+                Unix => "Unix type system/Linux",
+                Vcms => "VM/CMS",
+                AtariTos => "Atari TOS",
+                Hpfs => "HPFS filesystem (OS/2, NT)",
+                Macintosh => "Macintosh operating system (Classic Mac OS, OS/X, macOS, iOS etc.)",
+                Zsystem => "Z-System",
+                Cpm => "CP/M",
+                Tops20OrNTFS => "NTFS (New zlib versions) or TOPS-20",
+                NTFS => "NTFS",
+                SmsQdos => "SMS/QDOS",
+                Riscos => "Acorn RISC OS",
+                Vfat => "VFAT file system (Win95, NT)",
+                Mvs => "MVS or PRIMOS",
+                Beos => "BeOS",
+                TandemNsk => "Tandem/NSK",
+                Theos => "THEOS",
+                Apple => "macOS, OS/X, iOS or watchOS",
+                _ => "Unknown or unset",
+            }
+            .fmt(f)
+    }
+}
+
 /// Valid values for the extra flag in the gzip specification.
 ///
 /// This is a field to be used by the compression methods. For deflate, which is the only
 /// specified compression method, this is a value indicating the level of compression of the
 /// contained compressed data.
+enum_from_primitive!{
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ExtraFlags {
@@ -81,11 +117,22 @@ pub enum ExtraFlags {
     MaximumCompression = 2,
     FastestCompression = 4,
 }
+}
 
 impl ExtraFlags {
     /// Get the raw byte value of this `ExtraFlags` variant.
     pub fn as_u8(&self) -> u8 {
         *self as u8
+    }
+}
+
+impl fmt::Display for ExtraFlags {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ExtraFlags::Default => "No extra flags (Default)",
+            ExtraFlags::MaximumCompression => "Maximum compression algorithm (DEFLATE).",
+            ExtraFlags::FastestCompression => "Fastest compression algorithm (DEFLATE)",
+        }.fmt(f)
     }
 }
 
@@ -133,7 +180,7 @@ impl GzBuilder {
     /// Configure the `filename` field in the gzip header.
     ///
     /// # Panics
-    /// Panics if the filename argument contains a `\0` byte.
+    /// Panics if the filename argument contains a byte with the value 0.
     pub fn filename<T: Into<Vec<u8>>>(mut self, filename: T) -> GzBuilder {
         self.filename = Some(CString::new(filename).unwrap());
         self
@@ -142,7 +189,7 @@ impl GzBuilder {
     /// Configure the `comment` field in the gzip header.
     ///
     /// # Panics
-    /// Panics if the comment argument contains a `\0` byte.
+    /// Panics if the comment argument contains a byte with the value 0.
     pub fn comment<T: Into<Vec<u8>>>(mut self, comment: T) -> GzBuilder {
         self.comment = Some(CString::new(comment).unwrap());
         self

@@ -16,3 +16,4 @@ categories = ["compression"]
 
 [dependencies]
 crc = "1.4.0"
+enum_primitive = "0.1.1"
