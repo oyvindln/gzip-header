@@ -37,6 +37,7 @@ enum_from_primitive!{
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum FileSystemType {
+    //MS-DOS/old FAT filesystem
     Fat = 0,
     Amiga = 1,
     Vms = 2,
@@ -44,6 +45,7 @@ pub enum FileSystemType {
     Vcms = 4,
     AtariTos = 5,
     Hpfs = 6,
+    // Used for apple platforms. Newer encoders may use 19 instead for modern systems.
     Macintosh = 7,
     Zsystem = 8,
     Cpm = 9,
@@ -52,9 +54,11 @@ pub enum FileSystemType {
     // See https://github.com/madler/zlib/issues/235 and
     // https://github.com/madler/zlib/commit/ce12c5cd00628bf8f680c98123a369974d32df15
     Tops20OrNTFS = 10,
+    // Used for Windows platforms for older zlib and other encoders.
     NTFS = 11,
     SmsQdos = 12,
     Riscos = 13,
+    // Newer fat filesystem.
     Vfat = 14,
     Mvs = 15,
     Beos = 16,
@@ -108,9 +112,10 @@ impl fmt::Display for FileSystemType {
 ///
 /// This is a field to be used by the compression methods. For deflate, which is the only
 /// specified compression method, this is a value indicating the level of compression of the
-/// contained compressed data.
+/// contained compressed data. This value does not have to correspond to the actual compression
+/// level of the contained data, it's only a hint that the the encoder may set.
 enum_from_primitive!{
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ExtraFlags {
     Default = 0,
@@ -129,10 +134,11 @@ impl ExtraFlags {
 impl fmt::Display for ExtraFlags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            ExtraFlags::Default => "No extra flags (Default)",
-            ExtraFlags::MaximumCompression => "Maximum compression algorithm (DEFLATE).",
-            ExtraFlags::FastestCompression => "Fastest compression algorithm (DEFLATE)",
-        }.fmt(f)
+                ExtraFlags::Default => "No extra flags (Default)",
+                ExtraFlags::MaximumCompression => "Maximum compression algorithm (DEFLATE).",
+                ExtraFlags::FastestCompression => "Fastest compression algorithm (DEFLATE)",
+            }
+            .fmt(f)
     }
 }
 
@@ -309,7 +315,7 @@ impl GzBuilder {
 ///
 /// The header can contain metadata about the file that was compressed, if
 /// present.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GzHeader {
     extra: Option<Vec<u8>>,
     filename: Option<Vec<u8>>,

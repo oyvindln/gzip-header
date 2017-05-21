@@ -2,12 +2,13 @@
 
 use std::io::{Read, BufRead};
 use std::io;
+use std::fmt;
 
 use crc::crc32;
 
 /// A wrapper struct containing a CRC checksum in the format used by gzip and the amount of bytes
 /// input to it mod 2^32.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Crc {
     // We don't use the Digest struct from the Crc crate for now as it doesn't implement `Display`
     // and other common traits.
@@ -15,8 +16,15 @@ pub struct Crc {
     amt: u32,
 }
 
+impl fmt::Display for Crc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "({:#x},{})", self.checksum, self.amt)
+    }
+}
+
 /// A reader that updates the checksum and counter of a `Crc` struct when reading from the wrapped
 /// reader.
+#[derive(Debug)]
 pub struct CrcReader<R> {
     inner: R,
     crc: Crc,
