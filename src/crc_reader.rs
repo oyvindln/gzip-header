@@ -8,7 +8,7 @@ use crc::crc32;
 
 /// A wrapper struct containing a CRC checksum in the format used by gzip and the amount of bytes
 /// input to it mod 2^32.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub struct Crc {
     // We don't use the Digest struct from the Crc crate for now as it doesn't implement `Display`
     // and other common traits.

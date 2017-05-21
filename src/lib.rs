@@ -23,6 +23,7 @@ use std::ffi::CString;
 use std::{env, io, time};
 use std::io::Read;
 use std::fmt;
+use std::default::Default;
 
 pub use crc_reader::{CrcReader, Crc};
 
@@ -142,10 +143,16 @@ impl fmt::Display for ExtraFlags {
     }
 }
 
+impl Default for ExtraFlags {
+    fn default() -> ExtraFlags {
+        ExtraFlags::Default
+    }
+}
+
 /// A builder structure to create a new gzip header.
 ///
 /// This structure controls header configuration options such as the filename.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct GzBuilder {
     extra: Option<Vec<u8>>,
     filename: Option<CString>,
@@ -265,35 +272,28 @@ impl GzBuilder {
         };
         let mut header = vec![0u8; 10];
 
-        match extra {
-            Some(v) => {
-                flg |= FEXTRA;
-                header.push((v.len() >> 0) as u8);
-                header.push((v.len() >> 8) as u8);
-                header.extend(v);
-            }
-            None => {}
+        if let Some(v) = extra {
+            flg |= FEXTRA;
+            header.push((v.len()/* >> 0*/) as u8);
+            header.push((v.len() >> 8) as u8);
+            header.extend(v);
         }
-        match filename {
-            Some(filename) => {
+
+        if let Some(filename) = filename {
                 flg |= FNAME;
-                header.extend(filename.as_bytes_with_nul().iter().map(|x| *x));
-            }
-            None => {}
+                header.extend(filename.as_bytes_with_nul().iter().cloned());
         }
-        match comment {
-            Some(comment) => {
+
+        if let Some(comment) = comment {
                 flg |= FCOMMENT;
-                header.extend(comment.as_bytes_with_nul().iter().map(|x| *x));
-            }
-            None => {}
+                header.extend(comment.as_bytes_with_nul().iter().cloned());
         }
 
         header[0] = 0x1f;
         header[1] = 0x8b;
         header[2] = 8;
         header[3] = flg;
-        header[4] = (mtime >> 0) as u8;
+        header[4] = mtime /*>> 0*/ as u8;
         header[5] = (mtime >> 8) as u8;
         header[6] = (mtime >> 16) as u8;
         header[7] = (mtime >> 24) as u8;
@@ -307,7 +307,7 @@ impl GzBuilder {
             header.extend(&[checksum as u8, (checksum >> 8) as u8]);
         }
 
-        return header;
+        header
     }
 }
 
@@ -429,7 +429,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     // `FLG` the bits in this field indicates whether the `FTEXT`, `FHCRC`, `FEXTRA`, `FNAME` and
     // `FCOMMENT` fields are present in the header.
     let flg = header[3];
-    let mtime = ((header[4] as u32) << 0) | ((header[5] as u32) << 8) |
+    let mtime = (header[4] as u32/* << 0*/) | ((header[5] as u32) << 8) |
                 ((header[6] as u32) << 16) | ((header[7] as u32) << 24);
     // `XFL` describes the compression level used by the encoder. (May not actually
     // match what the encoder used and has no impact on decompression.)
@@ -528,6 +528,7 @@ mod tests {
     #[test]
     fn roundtrip() {
         roundtrip_inner(false);
+
     }
 
     #[test]
