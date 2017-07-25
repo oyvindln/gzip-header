@@ -1,6 +1,6 @@
 //! Simple CRC wrappers backed by the crc32 crate.
 
-use std::io::{Read, BufRead};
+use std::io::{BufRead, Read};
 use std::io;
 use std::fmt;
 

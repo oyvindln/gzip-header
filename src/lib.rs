@@ -19,13 +19,16 @@ extern crate enum_primitive;
 
 mod crc_reader;
 
+use std::borrow::Cow;
 use std::ffi::CString;
 use std::{env, io, time};
 use std::io::Read;
 use std::fmt;
 use std::default::Default;
 
-pub use crc_reader::{CrcReader, Crc};
+use enum_primitive::FromPrimitive;
+
+pub use crc_reader::{Crc, CrcReader};
 
 static FHCRC: u8 = 1 << 1;
 static FEXTRA: u8 = 1 << 2;
@@ -83,29 +86,28 @@ impl fmt::Display for FileSystemType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use FileSystemType::*;
         match *self {
-                Fat => "FAT filesystem (MS-DOS, OS/2, NT/Win32)",
-                Amiga => "Amiga",
-                Vms => "VMS or OpenVMS",
-                Unix => "Unix type system/Linux",
-                Vcms => "VM/CMS",
-                AtariTos => "Atari TOS",
-                Hpfs => "HPFS filesystem (OS/2, NT)",
-                Macintosh => "Macintosh operating system (Classic Mac OS, OS/X, macOS, iOS etc.)",
-                Zsystem => "Z-System",
-                Cpm => "CP/M",
-                Tops20OrNTFS => "NTFS (New zlib versions) or TOPS-20",
-                NTFS => "NTFS",
-                SmsQdos => "SMS/QDOS",
-                Riscos => "Acorn RISC OS",
-                Vfat => "VFAT file system (Win95, NT)",
-                Mvs => "MVS or PRIMOS",
-                Beos => "BeOS",
-                TandemNsk => "Tandem/NSK",
-                Theos => "THEOS",
-                Apple => "macOS, OS/X, iOS or watchOS",
-                _ => "Unknown or unset",
-            }
-            .fmt(f)
+            Fat => "FAT filesystem (MS-DOS, OS/2, NT/Win32)",
+            Amiga => "Amiga",
+            Vms => "VMS or OpenVMS",
+            Unix => "Unix type system/Linux",
+            Vcms => "VM/CMS",
+            AtariTos => "Atari TOS",
+            Hpfs => "HPFS filesystem (OS/2, NT)",
+            Macintosh => "Macintosh operating system (Classic Mac OS, OS/X, macOS, iOS etc.)",
+            Zsystem => "Z-System",
+            Cpm => "CP/M",
+            Tops20OrNTFS => "NTFS (New zlib versions) or TOPS-20",
+            NTFS => "NTFS",
+            SmsQdos => "SMS/QDOS",
+            Riscos => "Acorn RISC OS",
+            Vfat => "VFAT file system (Win95, NT)",
+            Mvs => "MVS or PRIMOS",
+            Beos => "BeOS",
+            TandemNsk => "Tandem/NSK",
+            Theos => "THEOS",
+            Apple => "macOS, OS/X, iOS or watchOS",
+            _ => "Unknown or unset",
+        }.fmt(f)
     }
 }
 
@@ -135,11 +137,10 @@ impl ExtraFlags {
 impl fmt::Display for ExtraFlags {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-                ExtraFlags::Default => "No extra flags (Default)",
-                ExtraFlags::MaximumCompression => "Maximum compression algorithm (DEFLATE).",
-                ExtraFlags::FastestCompression => "Fastest compression algorithm (DEFLATE)",
-            }
-            .fmt(f)
+            ExtraFlags::Default => "No extra flags (Default) or unknown.",
+            ExtraFlags::MaximumCompression => "Maximum compression algorithm (DEFLATE).",
+            ExtraFlags::FastestCompression => "Fastest compression algorithm (DEFLATE)",
+        }.fmt(f)
     }
 }
 
@@ -254,16 +255,16 @@ impl GzBuilder {
             Some(f) => f,
             // Set the OS based on the system the binary is compiled for if not set,
             // as this is a required field.
-            // These defaults are taken from what flate2 uses, which are not the same as
-            // what's used in zlib.
-            None => {
-                match env::consts::OS {
-                    "linux" => FileSystemType::Unix,
-                    "macos" => FileSystemType::Macintosh,
-                    "win32" => FileSystemType::Fat,
-                    _ => FileSystemType::Unknown,
+            // These defaults are taken from what modern zlib uses, which are not the same as
+            // what's used in flate2.
+            None => match env::consts::OS {
+                "linux" | "freebsd" | "dragonfly" | "netbsd" | "openbsd" | "solaris" | "bitrig" => {
+                    FileSystemType::Unix
                 }
-            }
+                "macos" => FileSystemType::Apple,
+                "win32" => FileSystemType::Tops20OrNTFS,
+                _ => FileSystemType::Unknown,
+            },
 
         };
         let mut flg = 0;
@@ -280,13 +281,13 @@ impl GzBuilder {
         }
 
         if let Some(filename) = filename {
-                flg |= FNAME;
-                header.extend(filename.as_bytes_with_nul().iter().cloned());
+            flg |= FNAME;
+            header.extend(filename.as_bytes_with_nul().iter().cloned());
         }
 
         if let Some(comment) = comment {
-                flg |= FCOMMENT;
-                header.extend(comment.as_bytes_with_nul().iter().cloned());
+            flg |= FCOMMENT;
+            header.extend(comment.as_bytes_with_nul().iter().cloned());
         }
 
         header[0] = 0x1f;
@@ -384,9 +385,45 @@ impl GzHeader {
     }
 }
 
+#[inline]
+fn into_string(data: Option<&[u8]>) -> Cow<str> {
+    data.map_or_else(
+        || Cow::Borrowed("(Not set)"),
+        |d| String::from_utf8_lossy(d),
+    )
+}
+
+impl fmt::Display for GzHeader {
+    /// Crudely display the contents of the header
+    ///
+    /// Note that filename/commend are required to be ISO 8859-1 (LATIN-1) encoded by the spec,
+    /// however to avoid dragging in dependencies we simply interpret them as UTF-8.
+    /// This may result in garbled output if the names contain special characters.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Filename: {}\n\
+             Comment: {}\n\
+             Extra: {:?}\n\
+             mtime: {}\n\
+             os: {}\n\
+             xfl: {}",
+            into_string(self.filename()),
+            into_string(self.comment()),
+            // We display extra as raw bytes for now.
+            self.extra,
+            self.mtime,
+            FileSystemType::from_u8(self.os).unwrap_or(FileSystemType::Unknown),
+            ExtraFlags::from_u8(self.xfl).unwrap_or(ExtraFlags::Default),
+        )
+    }
+}
+
 fn corrupt() -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidInput,
-                   "corrupt gzip stream does not have a matching header checksum")
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "corrupt gzip stream does not have a matching header checksum",
+    )
 }
 
 fn bad_header() -> io::Error {
@@ -430,7 +467,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     // `FCOMMENT` fields are present in the header.
     let flg = header[3];
     let mtime = (header[4] as u32/* << 0*/) | ((header[5] as u32) << 8) |
-                ((header[6] as u32) << 16) | ((header[7] as u32) << 24);
+        ((header[6] as u32) << 16) | ((header[7] as u32) << 24);
     // `XFL` describes the compression level used by the encoder. (May not actually
     // match what the encoder used and has no impact on decompression.)
     let xfl = header[8];
@@ -486,13 +523,13 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     }
 
     Ok(GzHeader {
-           extra: extra,
-           filename: filename,
-           comment: comment,
-           mtime: mtime,
-           os: os,
-           xfl: xfl,
-       })
+        extra: extra,
+        filename: filename,
+        comment: comment,
+        mtime: mtime,
+        os: os,
+        xfl: xfl,
+    })
 }
 
 #[cfg(test)]
@@ -518,6 +555,7 @@ mod tests {
         let mut reader = Cursor::new(header.clone());
 
         let header_read = read_gz_header(&mut reader).unwrap();
+
         assert_eq!(header_read.comment().unwrap(), COMMENT);
         assert_eq!(header_read.filename().unwrap(), FILENAME);
         assert_eq!(header_read.mtime(), MTIME);
