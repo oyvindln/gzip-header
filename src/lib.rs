@@ -14,8 +14,6 @@
 //! [flate2](https://crates.io/crates/flate2) crate.
 
 extern crate crc;
-#[macro_use]
-extern crate enum_primitive;
 
 mod crc_reader;
 
@@ -26,8 +24,6 @@ use std::io::Read;
 use std::fmt;
 use std::default::Default;
 
-use enum_primitive::FromPrimitive;
-
 pub use crc_reader::{Crc, CrcReader};
 
 static FHCRC: u8 = 1 << 1;
@@ -36,12 +32,12 @@ static FNAME: u8 = 1 << 3;
 static FCOMMENT: u8 = 1 << 4;
 
 /// An enum describing the different OS types described in the gzip format.
-/// See http://www.gzip.org/format.txt
-enum_from_primitive!{
+/// See http://www.gzip.org/format.txt (Additionally, the Apple(19) value is defined in the zlib
+/// library).
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum FileSystemType {
-    //MS-DOS/old FAT filesystem
+    ///MS-DOS/old FAT filesystem
     Fat = 0,
     Amiga = 1,
     Vms = 2,
@@ -49,36 +45,67 @@ pub enum FileSystemType {
     Vcms = 4,
     AtariTos = 5,
     Hpfs = 6,
-    // Used for apple platforms. Newer encoders may use 19 instead for modern systems.
+    /// Used for apple platforms. Newer encoders may use 19 instead for modern systems.
     Macintosh = 7,
     Zsystem = 8,
     Cpm = 9,
-    // This is used for Windows/NTFS in zlib newer than 1.2.11, but not in gzip due to following
-    // updates to the ZIP format.
-    // See https://github.com/madler/zlib/issues/235 and
-    // https://github.com/madler/zlib/commit/ce12c5cd00628bf8f680c98123a369974d32df15
+    /// This is used for Windows/NTFS in zlib newer than 1.2.11, but not in gzip due to following
+    /// updates to the ZIP format.
+    /// See https://github.com/madler/zlib/issues/235 and
+    /// https://github.com/madler/zlib/commit/ce12c5cd00628bf8f680c98123a369974d32df15
     Tops20OrNTFS = 10,
-    // Used for Windows platforms for older zlib and other encoders.
+    /// Used for Windows platforms for older zlib versions and other encoders.
     NTFS = 11,
     SmsQdos = 12,
     Riscos = 13,
-    // Newer fat filesystem.
+    /// Newer fat filesystems (i.e FAT32).
     Vfat = 14,
     Mvs = 15,
     Beos = 16,
     TandemNsk = 17,
     Theos = 18,
-    // Defined in the zlib library (see zutil.h)
-    // Modern apple platforms.
+    /// Modern apple platforms.
+    /// Defined in the zlib library (see zutil.h)
     Apple = 19,
     Unknown = 255,
-}
 }
 
 impl FileSystemType {
     /// Get the raw byte value of this `FileSystemType` variant.
     pub fn as_u8(&self) -> u8 {
         *self as u8
+    }
+
+    /// Get the corresponding `ExtraFlags` value from a raw byte.
+    ///
+    /// Returns `FileSystemType::Unknown` (defined as 255 as that is the value used in the
+    /// specification for `Unknown`) if the value is not one of the currently known types
+    /// (Which currently means any value > 19).
+    pub fn from_u8(value: u8) -> FileSystemType {
+        use FileSystemType::*;
+        match value {
+            0 => Fat,
+            1 => Amiga,
+            2 => Vms,
+            3 => Unix,
+            4 => Vcms,
+            5 => AtariTos,
+            6 => Hpfs,
+            7 => Macintosh,
+            8 => Zsystem,
+            9 => Cpm,
+            10 => Tops20OrNTFS,
+            11 => NTFS,
+            12 => SmsQdos,
+            13 => Riscos,
+            14 => Vfat,
+            15 => Mvs,
+            16 => Beos,
+            17 => TandemNsk,
+            18 => Theos,
+            19 => Apple,
+            _ => Unknown,
+        }
     }
 }
 
@@ -117,7 +144,6 @@ impl fmt::Display for FileSystemType {
 /// specified compression method, this is a value indicating the level of compression of the
 /// contained compressed data. This value does not have to correspond to the actual compression
 /// level of the contained data, it's only a hint that the the encoder may set.
-enum_from_primitive!{
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ExtraFlags {
@@ -125,9 +151,21 @@ pub enum ExtraFlags {
     MaximumCompression = 2,
     FastestCompression = 4,
 }
-}
 
 impl ExtraFlags {
+    /// Get the corresponding `ExtraFlags` value from a raw byte.
+    ///
+    /// Returns `ExtraFlags::Default` (defined as 0 by the gzip specification) for values other than
+    /// 2 and 4.
+    pub fn from_u8(value: u8) -> ExtraFlags {
+        use ExtraFlags::*;
+        match value {
+            2 => MaximumCompression,
+            4 => FastestCompression,
+            _ => Default,
+        }
+    }
+
     /// Get the raw byte value of this `ExtraFlags` variant.
     pub fn as_u8(&self) -> u8 {
         *self as u8
@@ -413,8 +451,8 @@ impl fmt::Display for GzHeader {
             // We display extra as raw bytes for now.
             self.extra,
             self.mtime,
-            FileSystemType::from_u8(self.os).unwrap_or(FileSystemType::Unknown),
-            ExtraFlags::from_u8(self.xfl).unwrap_or(ExtraFlags::Default),
+            FileSystemType::from_u8(self.os),
+            ExtraFlags::Default, //ExtraFlags::from_u8(self.xfl),
         )
     }
 }
@@ -572,5 +610,16 @@ mod tests {
     #[test]
     fn roundtrip_with_crc() {
         roundtrip_inner(true);
+    }
+
+    #[test]
+    fn filesystem_enum() {
+        for n in 0..20 {
+            assert_eq!(n, FileSystemType::from_u8(n).as_u8());
+        }
+
+        for n in 20..(u8::max_value() as u16) + 1 {
+            assert_eq!(FileSystemType::from_u8(n as u8), FileSystemType::Unknown);
+        }
     }
 }
