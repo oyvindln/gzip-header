@@ -13,7 +13,7 @@
 //! This library is based on the gzip header functionality in the
 //! [flate2](https://crates.io/crates/flate2) crate.
 
-extern crate crc;
+extern crate crc32fast;
 
 mod crc_reader;
 

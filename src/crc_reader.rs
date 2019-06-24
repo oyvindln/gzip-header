@@ -4,7 +4,7 @@ use std::io::{BufRead, Read};
 use std::io;
 use std::fmt;
 
-use crc::crc32;
+use crc32fast::Hasher;
 
 /// A wrapper struct containing a CRC checksum in the format used by gzip and the amount of bytes
 /// input to it mod 2^32.
@@ -59,7 +59,9 @@ impl Crc {
     /// Update the checksum and byte counter with the provided data.
     pub fn update(&mut self, data: &[u8]) {
         self.amt = self.amt.wrapping_add(data.len() as u32);
-        self.checksum = crc32::update(self.checksum, &crc32::IEEE_TABLE, data);
+        let mut h = Hasher::new_with_initial(self.checksum);
+        h.update(data);
+        self.checksum = h.finalize();
     }
 
     /// Reset the checksum and byte counter.
