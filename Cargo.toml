@@ -15,4 +15,4 @@ A crate for decoding and encoding the header part of gzip files based on the gzi
 categories = ["compression"]
 
 [dependencies]
-crc = "1.5.0"
+crc32fast = "1.2.0"
