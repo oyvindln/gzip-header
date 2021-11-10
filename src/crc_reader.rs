@@ -1,8 +1,8 @@
 //! Simple CRC wrappers backed by the crc32 crate.
 
-use std::io::{BufRead, Read};
-use std::io;
 use std::fmt;
+use std::io;
+use std::io::{BufRead, Read};
 
 use crc32fast::Hasher;
 
@@ -32,27 +32,24 @@ pub struct CrcReader<R> {
 
 impl Crc {
     /// Create a new empty CRC struct.
-    pub fn new() -> Crc {
+    pub const fn new() -> Crc {
         Crc {
             checksum: 0,
             amt: 0,
         }
     }
 
-    pub fn with_initial(checksum: u32, amount: u32) -> Crc {
-        Crc {
-            checksum: checksum,
-            amt: amount,
-        }
+    pub const fn with_initial(checksum: u32, amt: u32) -> Crc {
+        Crc { checksum, amt }
     }
 
     /// Return the current checksum value.
-    pub fn sum(&self) -> u32 {
+    pub const fn sum(&self) -> u32 {
         self.checksum
     }
 
     /// Return the number of bytes input.
-    pub fn amt_as_u32(&self) -> u32 {
+    pub const fn amt_as_u32(&self) -> u32 {
         self.amt
     }
 
@@ -103,7 +100,7 @@ impl<R: Read> CrcReader<R> {
 
 impl<R: Read> Read for CrcReader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        let amt = try!(self.inner.read(into));
+        let amt = self.inner.read(into)?;
         self.crc.update(&into[..amt]);
         Ok(amt)
     }

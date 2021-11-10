@@ -13,16 +13,17 @@
 //! This library is based on the gzip header functionality in the
 //! [flate2](https://crates.io/crates/flate2) crate.
 
+#![forbid(unsafe_code)]
 extern crate crc32fast;
 
 mod crc_reader;
 
 use std::borrow::Cow;
-use std::ffi::CString;
-use std::{env, io, time};
-use std::io::Read;
-use std::fmt;
 use std::default::Default;
+use std::ffi::CString;
+use std::fmt;
+use std::io::Read;
+use std::{env, io, time};
 
 pub use crc_reader::{Crc, CrcReader};
 
@@ -72,7 +73,7 @@ pub enum FileSystemType {
 
 impl FileSystemType {
     /// Get the raw byte value of this `FileSystemType` variant.
-    pub fn as_u8(&self) -> u8 {
+    pub const fn as_u8(&self) -> u8 {
         *self as u8
     }
 
@@ -134,7 +135,8 @@ impl fmt::Display for FileSystemType {
             Theos => "THEOS",
             Apple => "macOS, OS/X, iOS or watchOS",
             _ => "Unknown or unset",
-        }.fmt(f)
+        }
+        .fmt(f)
     }
 }
 
@@ -167,7 +169,7 @@ impl ExtraFlags {
     }
 
     /// Get the raw byte value of this `ExtraFlags` variant.
-    pub fn as_u8(&self) -> u8 {
+    pub const fn as_u8(&self) -> u8 {
         *self as u8
     }
 }
@@ -178,7 +180,8 @@ impl fmt::Display for ExtraFlags {
             ExtraFlags::Default => "No extra flags (Default) or unknown.",
             ExtraFlags::MaximumCompression => "Maximum compression algorithm (DEFLATE).",
             ExtraFlags::FastestCompression => "Fastest compression algorithm (DEFLATE)",
-        }.fmt(f)
+        }
+        .fmt(f)
     }
 }
 
@@ -303,7 +306,6 @@ impl GzBuilder {
                 "win32" => FileSystemType::Tops20OrNTFS,
                 _ => FileSystemType::Unknown,
             },
-
         };
         let mut flg = 0;
         if use_crc {
@@ -394,7 +396,7 @@ impl GzHeader {
     /// that is: seconds since 00:00:00 GMT, Jan. 1, 1970. (Not that this may cause problems for
     /// MS-DOS and other systems that use local rather than Universal time.)
     /// An `mtime` value of 0 means that the timestamp is not set.
-    pub fn mtime(&self) -> u32 {
+    pub const fn mtime(&self) -> u32 {
         self.mtime
     }
 
@@ -413,12 +415,12 @@ impl GzHeader {
     }
 
     /// Returns the `os` field of this gzip stream's header.
-    pub fn os(&self) -> u8 {
+    pub const fn os(&self) -> u8 {
         self.os
     }
 
     /// Returns the `xfl` field of this gzip stream's header.
-    pub fn xfl(&self) -> u8 {
+    pub const fn xfl(&self) -> u8 {
         self.xfl
     }
 }
@@ -471,7 +473,7 @@ fn bad_header() -> io::Error {
 /// Try to read a little-endian u16 from the provided reader.
 fn read_le_u16<R: Read>(r: &mut R) -> io::Result<u16> {
     let mut b = [0; 2];
-    try!(r.read_exact(&mut b));
+    r.read_exact(&mut b)?;
     Ok((b[0] as u16) | ((b[1] as u16) << 8))
 }
 
@@ -486,7 +488,7 @@ fn read_le_u16<R: Read>(r: &mut R) -> io::Result<u16> {
 pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     let mut crc_reader = CrcReader::new(r);
     let mut header = [0; 10];
-    try!(crc_reader.read_exact(&mut header));
+    crc_reader.read_exact(&mut header)?;
 
     // `ID1` and `ID2` are fixed values to identify a gzip file.
     let id1 = header[0];
@@ -504,8 +506,10 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     // `FLG` the bits in this field indicates whether the `FTEXT`, `FHCRC`, `FEXTRA`, `FNAME` and
     // `FCOMMENT` fields are present in the header.
     let flg = header[3];
-    let mtime = (header[4] as u32/* << 0*/) | ((header[5] as u32) << 8) |
-        ((header[6] as u32) << 16) | ((header[7] as u32) << 24);
+    let mtime = (header[4] as u32/* << 0*/)
+        | ((header[5] as u32) << 8)
+        | ((header[6] as u32) << 16)
+        | ((header[7] as u32) << 24);
     // `XFL` describes the compression level used by the encoder. (May not actually
     // match what the encoder used and has no impact on decompression.)
     let xfl = header[8];
@@ -514,9 +518,9 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
 
     let extra = if flg & FEXTRA != 0 {
         // Length of the FEXTRA field.
-        let xlen = try!(read_le_u16(&mut crc_reader));
+        let xlen = read_le_u16(&mut crc_reader)?;
         let mut extra = vec![0; xlen as usize];
-        try!(crc_reader.read_exact(&mut extra));
+        crc_reader.read_exact(&mut extra)?;
         Some(extra)
     } else {
         None
@@ -525,7 +529,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
         // wow this is slow
         let mut b = Vec::new();
         for byte in crc_reader.by_ref().bytes() {
-            let byte = try!(byte);
+            let byte = byte?;
             if byte == 0 {
                 break;
             }
@@ -539,7 +543,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
         // wow this is slow
         let mut b = Vec::new();
         for byte in crc_reader.by_ref().bytes() {
-            let byte = try!(byte);
+            let byte = byte?;
             if byte == 0 {
                 break;
             }
@@ -554,19 +558,19 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     // that needs to be validated.
     if flg & FHCRC != 0 {
         let calced_crc = crc_reader.crc().sum() as u16;
-        let stored_crc = try!(read_le_u16(&mut crc_reader));
+        let stored_crc = read_le_u16(&mut crc_reader)?;
         if calced_crc != stored_crc {
             return Err(corrupt());
         }
     }
 
     Ok(GzHeader {
-        extra: extra,
-        filename: filename,
-        comment: comment,
-        mtime: mtime,
-        os: os,
-        xfl: xfl,
+        extra,
+        filename,
+        comment,
+        mtime,
+        os,
+        xfl,
     })
 }
 
@@ -604,7 +608,6 @@ mod tests {
     #[test]
     fn roundtrip() {
         roundtrip_inner(false);
-
     }
 
     #[test]

@@ -9,6 +9,8 @@ The gzip header is purely a set of metadata, and doesn't have any impact on the 
 
 This library is based on the gzip header functionality in the [flate2](https://crates.io/crates/flate2) crate.
 
+Currently requires rust 1.32 and newer.
+
 # License
 
 Like the non-C parts of `flate2-rs`, `gzip-header` is distributed under the terms of both the MIT license and the Apache License (Version 2.0),
