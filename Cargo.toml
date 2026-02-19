@@ -16,4 +16,8 @@ categories = ["compression"]
 edition = "2018"
 
 [dependencies]
-crc32fast = "1.2.1"
+crc32fast = "1.5"
+
+[features]
+default = ["std"]
+std = []
