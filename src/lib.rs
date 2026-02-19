@@ -30,7 +30,9 @@ use std::io::Read;
 #[cfg(feature = "std")]
 use std::{env, io, time};
 
-pub use crc_reader::{Crc, CrcReader};
+pub use crc_reader::Crc;
+#[cfg(feature = "std")]
+pub use crc_reader::CrcReader;
 
 static FHCRC: u8 = 1 << 1;
 static FEXTRA: u8 = 1 << 2;
