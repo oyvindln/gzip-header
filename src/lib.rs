@@ -14,18 +14,25 @@
 //! [flate2](https://crates.io/crates/flate2) crate.
 
 #![forbid(unsafe_code)]
-extern crate crc32fast;
+#![no_std]
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 mod crc_reader;
 
-use std::borrow::Cow;
-use std::default::Default;
-use std::ffi::CString;
-use std::fmt;
+use alloc::borrow::Cow;
+use alloc::ffi::CString;
+use core::default::Default;
+use core::fmt;
+#[cfg(feature = "std")]
 use std::io::Read;
+#[cfg(feature = "std")]
 use std::{env, io, time};
 
-pub use crc_reader::{Crc, CrcReader};
+pub use crc_reader::Crc;
+#[cfg(feature = "std")]
+pub use crc_reader::CrcReader;
 
 static FHCRC: u8 = 1 << 1;
 static FEXTRA: u8 = 1 << 2;
@@ -146,9 +153,10 @@ impl fmt::Display for FileSystemType {
 /// specified compression method, this is a value indicating the level of compression of the
 /// contained compressed data. This value does not have to correspond to the actual compression
 /// level of the contained data, it's only a hint that the the encoder may set.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ExtraFlags {
+    #[default]
     Default = 0,
     MaximumCompression = 2,
     FastestCompression = 4,
@@ -185,18 +193,12 @@ impl fmt::Display for ExtraFlags {
     }
 }
 
-impl Default for ExtraFlags {
-    fn default() -> ExtraFlags {
-        ExtraFlags::Default
-    }
-}
-
 /// A builder structure to create a new gzip header.
 ///
 /// This structure controls header configuration options such as the filename.
 #[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub struct GzBuilder {
-    extra: Option<Vec<u8>>,
+    extra: Option<alloc::vec::Vec<u8>>,
     filename: Option<CString>,
     comment: Option<CString>,
     // Whether this should be signed is a bit unclear, the gzip spec says mtime is in the unix
@@ -227,7 +229,7 @@ impl GzBuilder {
     }
 
     /// Configure the `extra` field in the gzip header.
-    pub fn extra<T: Into<Vec<u8>>>(mut self, extra: T) -> GzBuilder {
+    pub fn extra<T: Into<alloc::vec::Vec<u8>>>(mut self, extra: T) -> GzBuilder {
         self.extra = Some(extra.into());
         self
     }
@@ -236,7 +238,7 @@ impl GzBuilder {
     ///
     /// # Panics
     /// Panics if the filename argument contains a byte with the value 0.
-    pub fn filename<T: Into<Vec<u8>>>(mut self, filename: T) -> GzBuilder {
+    pub fn filename<T: Into<alloc::vec::Vec<u8>>>(mut self, filename: T) -> GzBuilder {
         self.filename = Some(CString::new(filename).unwrap());
         self
     }
@@ -245,7 +247,7 @@ impl GzBuilder {
     ///
     /// # Panics
     /// Panics if the comment argument contains a byte with the value 0.
-    pub fn comment<T: Into<Vec<u8>>>(mut self, comment: T) -> GzBuilder {
+    pub fn comment<T: Into<alloc::vec::Vec<u8>>>(mut self, comment: T) -> GzBuilder {
         self.comment = Some(CString::new(comment).unwrap());
         self
     }
@@ -268,22 +270,22 @@ impl GzBuilder {
 
     /// Transforms this builder structure into a raw vector of bytes, setting the `XFL` field to the
     /// value specified by `lvl`.
-    pub fn into_header_xfl(mut self, lvl: ExtraFlags) -> Vec<u8> {
+    pub fn into_header_xfl(mut self, lvl: ExtraFlags) -> alloc::vec::Vec<u8> {
         self.xfl = lvl;
         self.into_header()
     }
 
     /// Transforms this builder structure into a raw vector of bytes.
-    pub fn into_header(self) -> Vec<u8> {
+    pub fn into_header(self) -> alloc::vec::Vec<u8> {
         self.into_header_inner(false)
     }
 
     /// Transforms this builder structure into a raw vector of bytes.
-    pub fn into_header_with_checksum(self) -> Vec<u8> {
+    pub fn into_header_with_checksum(self) -> alloc::vec::Vec<u8> {
         self.into_header_inner(true)
     }
 
-    fn into_header_inner(self, use_crc: bool) -> Vec<u8> {
+    fn into_header_inner(self, use_crc: bool) -> alloc::vec::Vec<u8> {
         let GzBuilder {
             extra,
             filename,
@@ -298,20 +300,24 @@ impl GzBuilder {
             // as this is a required field.
             // These defaults are taken from what modern zlib uses, which are not the same as
             // what's used in flate2.
-            None => match env::consts::OS {
-                "linux" | "freebsd" | "dragonfly" | "netbsd" | "openbsd" | "solaris" | "bitrig" => {
-                    FileSystemType::Unix
+            None => {
+                #[cfg(feature = "std")]
+                match env::consts::OS {
+                    "linux" | "freebsd" | "dragonfly" | "netbsd" | "openbsd" | "solaris"
+                    | "bitrig" => FileSystemType::Unix,
+                    "macos" => FileSystemType::Apple,
+                    "win32" => FileSystemType::Tops20OrNTFS,
+                    _ => FileSystemType::Unknown,
                 }
-                "macos" => FileSystemType::Apple,
-                "win32" => FileSystemType::Tops20OrNTFS,
-                _ => FileSystemType::Unknown,
-            },
+                #[cfg(not(feature = "std"))]
+                FileSystemType::Unknown
+            }
         };
         let mut flg = 0;
         if use_crc {
             flg |= FHCRC;
         };
-        let mut header = vec![0u8; 10];
+        let mut header = alloc::vec![0u8; 10];
 
         if let Some(v) = extra {
             flg |= FEXTRA;
@@ -358,9 +364,9 @@ impl GzBuilder {
 /// present.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GzHeader {
-    extra: Option<Vec<u8>>,
-    filename: Option<Vec<u8>>,
-    comment: Option<Vec<u8>>,
+    extra: Option<alloc::vec::Vec<u8>>,
+    filename: Option<alloc::vec::Vec<u8>>,
+    comment: Option<alloc::vec::Vec<u8>>,
     mtime: u32,
     os: u8,
     xfl: u8,
@@ -404,6 +410,7 @@ impl GzHeader {
     ///
     /// Returns `None` if the `mtime` is not set, i.e 0.
     /// See [`mtime`](#method.mtime) for more detail.
+    #[cfg(feature = "std")]
     pub fn mtime_as_datetime(&self) -> Option<time::SystemTime> {
         if self.mtime == 0 {
             None
@@ -426,10 +433,10 @@ impl GzHeader {
 }
 
 #[inline]
-fn into_string(data: Option<&[u8]>) -> Cow<str> {
+fn into_string<'a>(data: Option<&'a [u8]>) -> alloc::borrow::Cow<'a, str> {
     data.map_or_else(
         || Cow::Borrowed("(Not set)"),
-        |d| String::from_utf8_lossy(d),
+        |d| alloc::string::String::from_utf8_lossy(d),
     )
 }
 
@@ -459,6 +466,7 @@ impl fmt::Display for GzHeader {
     }
 }
 
+#[cfg(feature = "std")]
 fn corrupt() -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidInput,
@@ -466,11 +474,13 @@ fn corrupt() -> io::Error {
     )
 }
 
+#[cfg(feature = "std")]
 fn bad_header() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidInput, "invalid gzip header")
 }
 
 /// Try to read a little-endian u16 from the provided reader.
+#[cfg(feature = "std")]
 fn read_le_u16<R: Read>(r: &mut R) -> io::Result<u16> {
     let mut b = [0; 2];
     r.read_exact(&mut b)?;
@@ -485,6 +495,7 @@ fn read_le_u16<R: Read>(r: &mut R) -> io::Result<u16> {
 /// Note that a gzip steam can contain multiple "members". Each member contains a header,
 /// followed by compressed data and finally a checksum and byte count.
 /// This method will only read the header for the "member" at the start of the stream.
+#[cfg(feature = "std")]
 pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     let mut crc_reader = CrcReader::new(r);
     let mut header = [0; 10];
@@ -519,7 +530,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     let extra = if flg & FEXTRA != 0 {
         // Length of the FEXTRA field.
         let xlen = read_le_u16(&mut crc_reader)?;
-        let mut extra = vec![0; xlen as usize];
+        let mut extra = alloc::vec![0; xlen as usize];
         crc_reader.read_exact(&mut extra)?;
         Some(extra)
     } else {
@@ -527,7 +538,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     };
     let filename = if flg & FNAME != 0 {
         // wow this is slow
-        let mut b = Vec::new();
+        let mut b = alloc::vec::Vec::new();
         for byte in crc_reader.by_ref().bytes() {
             let byte = byte?;
             if byte == 0 {
@@ -541,7 +552,7 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
     };
     let comment = if flg & FCOMMENT != 0 {
         // wow this is slow
-        let mut b = Vec::new();
+        let mut b = alloc::vec::Vec::new();
         for byte in crc_reader.by_ref().bytes() {
             let byte = byte?;
             if byte == 0 {
@@ -576,12 +587,13 @@ pub fn read_gz_header<R: Read>(r: &mut R) -> io::Result<GzHeader> {
 
 #[cfg(test)]
 mod tests {
+    extern crate std;
     use super::*;
     use std::io::Cursor;
 
     fn roundtrip_inner(use_crc: bool) {
-        const COMMENT: &'static [u8] = b"Comment";
-        const FILENAME: &'static [u8] = b"Filename";
+        const COMMENT: &[u8] = b"Comment";
+        const FILENAME: &[u8] = b"Filename";
         const MTIME: u32 = 12345;
         const OS: FileSystemType = FileSystemType::NTFS;
         const XFL: ExtraFlags = ExtraFlags::FastestCompression;
@@ -621,7 +633,7 @@ mod tests {
             assert_eq!(n, FileSystemType::from_u8(n).as_u8());
         }
 
-        for n in 20..(u8::max_value() as u16) + 1 {
+        for n in 20..(u8::MAX as u16) + 1 {
             assert_eq!(FileSystemType::from_u8(n as u8), FileSystemType::Unknown);
         }
     }

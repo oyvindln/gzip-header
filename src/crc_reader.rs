@@ -1,7 +1,9 @@
 //! Simple CRC wrappers backed by the crc32 crate.
 
-use std::fmt;
+use core::fmt;
+#[cfg(feature = "std")]
 use std::io;
+#[cfg(feature = "std")]
 use std::io::{BufRead, Read};
 
 use crc32fast::Hasher;
@@ -20,14 +22,6 @@ impl fmt::Display for Crc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "({:#x},{})", self.checksum, self.amt)
     }
-}
-
-/// A reader that updates the checksum and counter of a `Crc` struct when reading from the wrapped
-/// reader.
-#[derive(Debug)]
-pub struct CrcReader<R> {
-    inner: R,
-    crc: Crc,
 }
 
 impl Crc {
@@ -68,6 +62,17 @@ impl Crc {
     }
 }
 
+/// A reader that updates the checksum and counter of a `Crc` struct when reading from the wrapped
+/// reader.
+#[cfg(feature = "std")]
+#[derive(Debug)]
+pub struct CrcReader<R> {
+    inner: R,
+    crc: Crc,
+}
+
+
+#[cfg(feature = "std")]
 impl<R: Read> CrcReader<R> {
     /// Create a new `CrcReader` with a blank checksum.
     pub fn new(r: R) -> CrcReader<R> {
@@ -98,6 +103,7 @@ impl<R: Read> CrcReader<R> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<R: Read> Read for CrcReader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let amt = self.inner.read(into)?;
@@ -106,6 +112,7 @@ impl<R: Read> Read for CrcReader<R> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<R: BufRead> BufRead for CrcReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.inner.fill_buf()
