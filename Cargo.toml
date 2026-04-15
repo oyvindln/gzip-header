@@ -1,6 +1,6 @@
 [package]
 name = "gzip-header"
-version = "1.0.0"
+version = "1.1.0"
 license = "MIT/Apache-2.0"
 authors = ["oyvindln <oyvindln@users.noreply.github.com>"]
 readme = "README.md"
